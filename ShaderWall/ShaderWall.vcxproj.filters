@@ -64,6 +64,8 @@
     <None Include="Shader\flame.glsl">
       <Filter>Shader</Filter>
     </None>
-    <None Include="Shader\voxel_edges.glsl" />
+    <None Include="Shader\voxel_edges.glsl">
+      <Filter>Shader</Filter>
+    </None>
   </ItemGroup>
 </Project>
