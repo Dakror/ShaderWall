@@ -9,6 +9,12 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <dwmapi.h>
+
+#define GLFW_EXPOSE_NATIVE_WIN32
+#define GLFW_EXPOSE_NATIVE_WGL
+
+#include <GLFW/glfw3native.h>
 
 #ifndef _DEBUG
 #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
@@ -23,6 +29,7 @@ GLuint load_texture(string filenameString, float &width, float &height, GLenum m
 void link_program();
 bool replace(string& str, const string& from, const string& to);
 void set_effect();
+void take_screenshot(const char* background, int width, int height, const char* filename);
 int main(void);
 
 struct texture
@@ -32,7 +39,7 @@ struct texture
 };
 
 
-const vector<vector<string>> effects = { { "cypher" }, { "digitalbrain", "tex16.png" }, { "flame" }, { "galaxy" }, { "interstellar", "tex16.png" }, { "noise_anim_flow", "tex16.png" }, /*{"sodki_canady", "tex16.png"},*/{ "starnest" }, { "topologica", "tex16.png" }, /*{"volcanic", "tex16.png", "tex06.jpg", "tex09.jpg"},*//*{ "voxel_edges", "tex07.jpg", "tex06.jpg" },*/ { "warping", "tex16.png" }, { "waves", "tex16.png" } };
+const vector<vector<string>> effects = { { "cypher" }, { "digitalbrain", "tex16.png" }, { "flame" }, { "galaxy" }, { "interstellar", "tex16.png" }, { "noise_anim_flow", "tex16.png" }, /*{"sodki_canady", "tex16.png"},*/{ "starnest" }, { "topologica", "tex16.png" }, /*{"volcanic", "tex16.png", "tex06.jpg", "tex09.jpg"},*//*{ "voxel_edges", "tex07.jpg", "tex06.jpg" },*/{ "warping", "tex16.png" }, { "waves", "tex16.png" } };
 int num_effects;
 int effect;
 float* channelRes;
@@ -90,7 +97,7 @@ GLuint load_texture(string filenameString, float &width, float &height, GLenum m
   if (format == -1)
   {
     cout << "Could not find image: " << filenameString << " - Aborting." << endl;
-    exit(-1);
+    return 0;
   }
 
   if (format == FIF_UNKNOWN)
@@ -102,7 +109,7 @@ GLuint load_texture(string filenameString, float &width, float &height, GLenum m
     if (!FreeImage_FIFSupportsReading(format))
     {
       cout << "Detected image format cannot be read!" << endl;
-      exit(-1);
+      return 0;
     }
   }
 
@@ -184,18 +191,22 @@ void set_effect()
 {
   if (effects[effect].size() > 1)
   {
-    glActiveTexture(GL_TEXTURE0);
+    glActiveTexture(GL_TEXTURE0 + 0);
     glBindTexture(GL_TEXTURE_2D, load_texture(effects[effect][1], channelRes[0], channelRes[1]));
 
     if (effects[effect].size() > 2)
     {
-      glActiveTexture(GL_TEXTURE1);
+      glActiveTexture(GL_TEXTURE0 + 1);
       glBindTexture(GL_TEXTURE_2D, load_texture(effects[effect][2], channelRes[3], channelRes[4]));
 
-      if (effects[effect].size() == 4)
-      {
-        glActiveTexture(GL_TEXTURE2);
+      if (effects[effect].size() > 3) {
+        glActiveTexture(GL_TEXTURE0 + 2);
         glBindTexture(GL_TEXTURE_2D, load_texture(effects[effect][3], channelRes[6], channelRes[7]));
+
+        if (effects[effect].size() == 5) {
+          glActiveTexture(GL_TEXTURE0 + 3);
+          glBindTexture(GL_TEXTURE_2D, load_texture(effects[effect][4], channelRes[9], channelRes[10]));
+        }
       }
     }
   }
@@ -207,6 +218,34 @@ bool replace(string& str, const string& from, const string& to) {
     return false;
   str.replace(start_pos, from.length(), to);
   return true;
+}
+
+void take_screenshot(const char* background, int width, int height, const char* filename)
+{
+  SystemParametersInfoA(SPI_SETDESKWALLPAPER, 0, (PVOID)background, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+  RedrawWindow(NULL, NULL, NULL, RDW_INTERNALPAINT | RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_INVALIDATE);
+
+  HDC hScreen = GetWindowDC(FindWindow(L"Progman", L"Program Manager"));
+  HDC hDC = CreateCompatibleDC(hScreen);
+  HBITMAP hBitmap = CreateCompatibleBitmap(hScreen, width, height);
+  HGDIOBJ old_obj = SelectObject(hDC, hBitmap);
+  BOOL    bRet = BitBlt(hDC, 0, 0, width, height, hScreen, 0, 0, SRCCOPY);
+
+  BITMAP bm;
+  GetObject(hBitmap, sizeof(BITMAP), (LPSTR)&bm);
+  FIBITMAP *dib = FreeImage_Allocate(bm.bmWidth, bm.bmHeight, bm.bmBitsPixel);
+  // The GetDIBits function clears the biClrUsed and biClrImportant BITMAPINFO members (dont't know why) 
+  // So we save these infos below. This is needed for palettized images only. 
+  int nColors = FreeImage_GetColorsUsed(dib);
+  HDC dc = GetDC(NULL);
+  int Success = GetDIBits(dc, hBitmap, 0, FreeImage_GetHeight(dib),
+    FreeImage_GetBits(dib), FreeImage_GetInfo(dib), DIB_RGB_COLORS);
+  ReleaseDC(NULL, dc);
+  // restore BITMAPINFO members
+  FreeImage_GetInfoHeader(dib)->biClrUsed = nColors;
+  FreeImage_GetInfoHeader(dib)->biClrImportant = nColors;
+
+  FreeImage_Save(FIF_PNG, dib, filename, 0);
 }
 
 int main(void)
@@ -255,8 +294,13 @@ int main(void)
     exit(EXIT_FAILURE);
   }
 
+  DWM_BLURBEHIND bb;
+  bb.dwFlags = DWM_BB_ENABLE;
+  bb.fEnable = true;
+  DwmEnableBlurBehindWindow(glfwGetWin32Window(window), &bb);
+
   glfwSetWindowPos(window, minX, 0);
-  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+  // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 
   glfwMakeContextCurrent(window);
   glfwSwapInterval(0);
@@ -300,11 +344,16 @@ int main(void)
       "uniform sampler2D iChannel1;\n"
       "uniform sampler2D iChannel2;\n"
       "uniform sampler2D iChannel3;\n"
+      "uniform sampler2D whiteScreen;\n"
+      "uniform sampler2D blackScreen;\n"
       "uniform vec3 iChannelResolution[4];\n"
       "%shader%\n"
       "void main()\n"
       "{\n"
-      "frag_color=%main_image%(coords*iResolution.rg);\n"
+      "vec4 color = %main_image%(coords*iResolution.rg);\n"
+      "vec3 white = texture2D(whiteScreen, coords).rgb;\n"
+      "vec3 black = texture2D(blackScreen, coords).rgb;\n"
+      "frag_color = vec4(color.rgba * (black == vec3(0.0) ? 1:0));\n"
       "}\n";
 
     replace(fshader, "%shader%", shader);
@@ -325,6 +374,20 @@ int main(void)
 
   int frame = 0;
   int width = 0, height = 0;
+
+  take_screenshot("E:/Programmieren/C C++/Projects/ShaderWall/ShaderWall/Shader/white.png", screenWidth, screenHeight, "Shader/whiteScreen.png");
+  take_screenshot("E:/Programmieren/C C++/Projects/ShaderWall/ShaderWall/Shader/black.png", screenWidth, screenHeight, "Shader/blackScreen.png");
+
+  float w = 0, h = 0;
+  GLuint whiteScreen;
+  glGenTextures(1, &whiteScreen);
+  glActiveTexture(GL_TEXTURE0 + 4);
+  glBindTexture(GL_TEXTURE_2D, load_texture("whiteScreen.png", w, h)); 
+  GLuint blackScreen;
+  glGenTextures(1, &blackScreen);
+  glActiveTexture(GL_TEXTURE0 + 5);
+  glBindTexture(GL_TEXTURE_2D, load_texture("blackScreen.png", w, h));
+
 
   while (!glfwWindowShouldClose(window))
   {
@@ -347,6 +410,8 @@ int main(void)
     GLint iChannel1 = glGetUniformLocation(program, "iChannel1");
     GLint iChannel2 = glGetUniformLocation(program, "iChannel2");
     GLint iChannel3 = glGetUniformLocation(program, "iChannel3");
+    GLint whiteScreen = glGetUniformLocation(program, "whiteScreen");
+    GLint blackScreen = glGetUniformLocation(program, "blackScreen");
     GLint iChannelResolution = glGetUniformLocation(program, "iChannelResolution");
 
     glUniform3f(iResolution, width, height, 0);
@@ -356,6 +421,8 @@ int main(void)
     glUniform1i(iChannel1, 1);
     glUniform1i(iChannel2, 2);
     glUniform1i(iChannel3, 3);
+    glUniform1i(whiteScreen, 4);
+    glUniform1i(blackScreen, 5);
     glUniform3fv(iChannelResolution, 4, channelRes);
 
     glEnable(GL_TEXTURE_2D);
