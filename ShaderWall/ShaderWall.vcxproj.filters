@@ -67,5 +67,6 @@
     <None Include="Shader\voxel_edges.glsl">
       <Filter>Shader</Filter>
     </None>
+    <None Include="Shader\fs.glsl" />
   </ItemGroup>
 </Project>

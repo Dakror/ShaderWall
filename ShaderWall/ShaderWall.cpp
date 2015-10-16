@@ -30,7 +30,9 @@ void link_program();
 bool replace(string& str, const string& from, const string& to);
 void set_effect();
 void take_screenshot(const char* background, int width, int height, const char* filename);
+int* get_taskbars(int count);
 int main(void);
+
 
 struct texture
 {
@@ -248,6 +250,34 @@ void take_screenshot(const char* background, int width, int height, const char* 
   FreeImage_Save(FIF_PNG, dib, filename, 0);
 }
 
+int* get_taskbars(int count)
+{
+  int* sizes = new int[4 * count];
+  RECT rect;
+  HWND taskbar;
+  int i = 0;
+  taskbar = FindWindow(L"Shell_TrayWnd", NULL);
+  GetWindowRect(taskbar, &rect);
+  sizes[i++] = rect.left;
+  sizes[i++] = rect.top;
+  sizes[i++] = rect.right;
+  sizes[i++] = rect.bottom;
+  count--;
+
+
+  for (; count > 0; count--)
+  {
+    taskbar = FindWindowEx(NULL, taskbar, L"Shell_SecondaryTrayWnd", NULL);
+    GetWindowRect(taskbar, &rect);
+    sizes[i++] = rect.left;
+    sizes[i++] = rect.top;
+    sizes[i++] = rect.right;
+    sizes[i++] = rect.bottom;
+  }
+
+  return sizes;
+}
+
 int main(void)
 {
   GLFWwindow* window;
@@ -294,10 +324,14 @@ int main(void)
     exit(EXIT_FAILURE);
   }
 
+  HWND hWindow = glfwGetWin32Window(window);
+
   DWM_BLURBEHIND bb;
   bb.dwFlags = DWM_BB_ENABLE;
   bb.fEnable = true;
-  DwmEnableBlurBehindWindow(glfwGetWin32Window(window), &bb);
+  DwmEnableBlurBehindWindow(hWindow, &bb);
+
+  SetWindowLongPtr(hWindow, GWL_EXSTYLE, WS_EX_LAYERED | WS_EX_TRANSPARENT);
 
   glfwSetWindowPos(window, minX, 0);
   // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
@@ -334,30 +368,10 @@ int main(void)
     replace(shader, "void mainImage( out vec4 fragColor, in vec2 fragCoord ) {", "vec4 " + effects[i][0] + "( vec2 fragCoord ) {\nvec4 fragColor;");
     shader = shader.substr(0, shader.length() - 3) + "return fragColor;\n}\n";
 
-    string fshader =
-      "out vec4 frag_color;\n"
-      "in vec2 coords;\n"
-      "uniform vec3 iResolution;\n"
-      "uniform float iGlobalTime;\n"
-      "uniform vec4 iMouse;\n"
-      "uniform sampler2D iChannel0;\n"
-      "uniform sampler2D iChannel1;\n"
-      "uniform sampler2D iChannel2;\n"
-      "uniform sampler2D iChannel3;\n"
-      "uniform sampler2D whiteScreen;\n"
-      "uniform sampler2D blackScreen;\n"
-      "uniform vec3 iChannelResolution[4];\n"
-      "%shader%\n"
-      "void main()\n"
-      "{\n"
-      "vec4 color = %main_image%(coords*iResolution.rg);\n"
-      "vec3 white = texture2D(whiteScreen, coords).rgb;\n"
-      "vec3 black = texture2D(blackScreen, coords).rgb;\n"
-      "frag_color = vec4(color.rgba * (black == vec3(0.0) ? 1:0));\n"
-      "}\n";
+    string fshader = read_file("Shader/fs.glsl");
 
-    replace(fshader, "%shader%", shader);
-    replace(fshader, "%main_image%", effects[i][0]);
+    replace(fshader, "/*shader*/", shader);
+    replace(fshader, "/*main_image*/", effects[i][0]);
 
     const char* fragment_shader = fshader.c_str();
     glShaderSource(fs, 1, &fragment_shader, nullptr);
@@ -382,12 +396,13 @@ int main(void)
   GLuint whiteScreen;
   glGenTextures(1, &whiteScreen);
   glActiveTexture(GL_TEXTURE0 + 4);
-  glBindTexture(GL_TEXTURE_2D, load_texture("whiteScreen.png", w, h)); 
+  glBindTexture(GL_TEXTURE_2D, load_texture("whiteScreen.png", w, h));
   GLuint blackScreen;
   glGenTextures(1, &blackScreen);
   glActiveTexture(GL_TEXTURE0 + 5);
   glBindTexture(GL_TEXTURE_2D, load_texture("blackScreen.png", w, h));
 
+  int* taskbars = get_taskbars(count);
 
   while (!glfwWindowShouldClose(window))
   {
@@ -413,6 +428,8 @@ int main(void)
     GLint whiteScreen = glGetUniformLocation(program, "whiteScreen");
     GLint blackScreen = glGetUniformLocation(program, "blackScreen");
     GLint iChannelResolution = glGetUniformLocation(program, "iChannelResolution");
+    GLint monitorCount = glGetUniformLocation(program, "monitorCount");
+    GLint taskBars = glGetUniformLocation(program, "taskBars");
 
     glUniform3f(iResolution, width, height, 0);
     glUniform1f(iGlobalTime, glfwGetTime());
@@ -423,7 +440,9 @@ int main(void)
     glUniform1i(iChannel3, 3);
     glUniform1i(whiteScreen, 4);
     glUniform1i(blackScreen, 5);
+    glUniform1i(monitorCount, count);
     glUniform3fv(iChannelResolution, 4, channelRes);
+    glUniform4iv(taskBars, count, taskbars);
 
     glEnable(GL_TEXTURE_2D);
 
