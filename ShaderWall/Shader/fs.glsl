@@ -10,31 +10,26 @@ uniform sampler2D iChannel3;
 uniform sampler2D whiteScreen;
 uniform sampler2D blackScreen;
 uniform vec3 iChannelResolution[4];
-uniform int monitorCount;
-uniform ivec4 taskBars[]; // solve the issue that we need a buffer here
+uniform ivec4 taskBars[/*taskbars*/];
 /*shader*/
 
 void main() 
 {
-	vec2 fullCoords = coords*iResolution.rg;
-
+    vec2 fullCoords = coords*iResolution.rg;
     vec4 color = /*main_image*/(fullCoords);
     vec3 white = texture2D(whiteScreen, coords).rgb;
     vec3 black = texture2D(blackScreen, coords).rgb;
-	bool isOk = true;
-    if(all(greaterThan(white, vec3(0.85))) && all(lessThan(black, vec3(0.15)))) isOk = false;
+    int mode = 0;
+    if(!(all(greaterThan(white, vec3(0.85))) && all(lessThan(black, vec3(0.15))))) mode = 1;
 
-	for (int i = 0; i < monitorCount; i++) {
-		if(all(greaterThanEqual(fullCoords, taskBars[i].xy)) && all(lessThanEqual(fullCoords, vec2(taskBars[i].x + taskBars[i].z, taskBars[i].y + taskBars[i].w)))) {
-			isOk = false;
-			break;
-		}
+    for (int i = 0; i < taskBars.length(); i++) {
+        if(all(greaterThanEqual(fullCoords, taskBars[i].xw)) && all(lessThanEqual(fullCoords, taskBars[i].zy))) {
+            mode = 2;
+            break;
+        }
 	}
-
-    frag_color = isOk ? color : vec4(black, 1.0);
+    frag_color = mode == 0 ? color : (mode == 1 ? vec4(black, 1.0) : vec4(0.0));
+    /*int i = 0;
+    if(fullCoords.x >= taskBars[i].x && fullCoords.y <= taskBars[i].y && fullCoords.x <= taskBars[i].z && fullCoords.y >= taskBars[i].w) 
+	frag_color = vec4(1.0,0.0,0.0,1.0);*/
 }
-
-
-
-
-

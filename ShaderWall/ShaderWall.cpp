@@ -17,7 +17,7 @@
 #include <GLFW/glfw3native.h>
 
 #ifndef _DEBUG
-#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
+//#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 #endif
 
 using namespace std;
@@ -30,7 +30,7 @@ void link_program();
 bool replace(string& str, const string& from, const string& to);
 void set_effect();
 void take_screenshot(const char* background, int width, int height, const char* filename);
-int* get_taskbars(int count);
+int* get_taskbars(const int count, const int height);
 int main(void);
 
 
@@ -250,7 +250,7 @@ void take_screenshot(const char* background, int width, int height, const char* 
   FreeImage_Save(FIF_PNG, dib, filename, 0);
 }
 
-int* get_taskbars(int count)
+int* get_taskbars(const int count, const int height)
 {
   int* sizes = new int[4 * count];
   RECT rect;
@@ -262,10 +262,10 @@ int* get_taskbars(int count)
   sizes[i++] = rect.top;
   sizes[i++] = rect.right;
   sizes[i++] = rect.bottom;
-  count--;
 
+  int smallestX = 0, smallestY = 0;
 
-  for (; count > 0; count--)
+  for (int c = count - 1; c >= 0; c--)
   {
     taskbar = FindWindowEx(NULL, taskbar, L"Shell_SecondaryTrayWnd", NULL);
     GetWindowRect(taskbar, &rect);
@@ -273,6 +273,27 @@ int* get_taskbars(int count)
     sizes[i++] = rect.top;
     sizes[i++] = rect.right;
     sizes[i++] = rect.bottom;
+
+    if (rect.left < smallestX) smallestX = rect.left;
+    if (rect.top < smallestY) smallestY = rect.top;
+  }
+
+  for (int j = 0; j < count * 4; j += 4)
+  {
+    fprintf(stdout, "%d %d %d %d\n", sizes[j], sizes[j + 1], sizes[j + 2], sizes[j + 3]);
+  }
+
+  fprintf(stdout, "-----%d\n", height);
+
+  for (int j = 0; j < 4 * count; j += 2)
+  {
+    sizes[j] += abs(smallestX);
+    sizes[j + 1] = height - (sizes[j + 1] + abs(smallestY));
+  }
+
+  for (int j = 0; j < count * 4; j += 4)
+  {
+    fprintf(stdout, "%d %d %d %d\n", sizes[j], sizes[j + 1], sizes[j + 2], sizes[j + 3]);
   }
 
   return sizes;
@@ -331,7 +352,7 @@ int main(void)
   bb.fEnable = true;
   DwmEnableBlurBehindWindow(hWindow, &bb);
 
-  SetWindowLongPtr(hWindow, GWL_EXSTYLE, WS_EX_LAYERED | WS_EX_TRANSPARENT);
+  SetWindowLongPtr(hWindow, GWL_EXSTYLE, WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_APPWINDOW);
 
   glfwSetWindowPos(window, minX, 0);
   // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
@@ -370,6 +391,7 @@ int main(void)
 
     string fshader = read_file("Shader/fs.glsl");
 
+    replace(fshader, "/*taskbars*/", to_string(count));
     replace(fshader, "/*shader*/", shader);
     replace(fshader, "/*main_image*/", effects[i][0]);
 
@@ -402,7 +424,7 @@ int main(void)
   glActiveTexture(GL_TEXTURE0 + 5);
   glBindTexture(GL_TEXTURE_2D, load_texture("blackScreen.png", w, h));
 
-  int* taskbars = get_taskbars(count);
+  int* taskbars = get_taskbars(count, screenHeight);
 
   while (!glfwWindowShouldClose(window))
   {
@@ -428,7 +450,6 @@ int main(void)
     GLint whiteScreen = glGetUniformLocation(program, "whiteScreen");
     GLint blackScreen = glGetUniformLocation(program, "blackScreen");
     GLint iChannelResolution = glGetUniformLocation(program, "iChannelResolution");
-    GLint monitorCount = glGetUniformLocation(program, "monitorCount");
     GLint taskBars = glGetUniformLocation(program, "taskBars");
 
     glUniform3f(iResolution, width, height, 0);
@@ -440,7 +461,6 @@ int main(void)
     glUniform1i(iChannel3, 3);
     glUniform1i(whiteScreen, 4);
     glUniform1i(blackScreen, 5);
-    glUniform1i(monitorCount, count);
     glUniform3fv(iChannelResolution, 4, channelRes);
     glUniform4iv(taskBars, count, taskbars);
 
