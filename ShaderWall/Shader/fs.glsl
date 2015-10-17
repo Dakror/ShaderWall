@@ -28,7 +28,7 @@ void main()
             break;
         }
 	}
-    frag_color = mode == 0 ? color : (mode == 1 ? vec4(black, 1.0) : vec4(0.0));
+    frag_color = mode == 0 ? vec4(color.rgb, 1.0) : (mode == 1 ? vec4(black, 1.0) : vec4(0.0));
     /*int i = 0;
     if(fullCoords.x >= taskBars[i].x && fullCoords.y <= taskBars[i].y && fullCoords.x <= taskBars[i].z && fullCoords.y >= taskBars[i].w) 
 	frag_color = vec4(1.0,0.0,0.0,1.0);*/

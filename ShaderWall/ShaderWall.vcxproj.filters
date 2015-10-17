@@ -70,5 +70,23 @@
     <None Include="Shader\fs.glsl">
       <Filter>Shader</Filter>
     </None>
+    <None Include="Shader\cloud10.glsl">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="Shader\menger.glsl">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="Shader\disk.glsl">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="Shader\fiery_spiral.glsl">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="Shader\rasterizer.glsl">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="Shader\planet_shadertoy.glsl">
+      <Filter>Shader</Filter>
+    </None>
   </ItemGroup>
 </Project>

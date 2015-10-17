@@ -10,6 +10,7 @@
 #include <vector>
 #include <map>
 #include <dwmapi.h>
+#include <thread>
 
 #define GLFW_EXPOSE_NATIVE_WIN32
 #define GLFW_EXPOSE_NATIVE_WGL
@@ -31,6 +32,8 @@ bool replace(string& str, const string& from, const string& to);
 void set_effect();
 void take_screenshot(const char* background, int width, int height, const char* filename);
 int* get_taskbars(const int count, const int height);
+void next_effect();
+void message_thread();
 int main(void);
 
 
@@ -41,12 +44,12 @@ struct texture
 };
 
 
-const vector<vector<string>> effects = { { "cypher" }, { "digitalbrain", "tex16.png" }, { "flame" }, { "galaxy" }, { "interstellar", "tex16.png" }, { "noise_anim_flow", "tex16.png" }, /*{"sodki_canady", "tex16.png"},*/{ "starnest" }, { "topologica", "tex16.png" }, /*{"volcanic", "tex16.png", "tex06.jpg", "tex09.jpg"},*//*{ "voxel_edges", "tex07.jpg", "tex06.jpg" },*/{ "warping", "tex16.png" }, { "waves", "tex16.png" } };
+const vector<vector<string>> effects = { /*{"cloud10"} ,*/{ "cypher" }, { "digitalbrain", "tex16.png" }, { "disk" }, { "fiery_spiral" }, { "flame" }, { "galaxy" }, { "interstellar", "tex16.png" }, { "menger" }, { "noise_anim_flow", "tex16.png" }, {"planet_shadertoy"}, {"rasterizer", "tex02.jpg"}, /*{"sodki_canady", "tex16.png"},*/{ "starnest" }, { "topologica", "tex16.png" }, /*{"volcanic", "tex16.png", "tex06.jpg", "tex09.jpg"},*//*{ "voxel_edges", "tex07.jpg", "tex06.jpg" },*/{ "warping", "tex16.png" }, { "waves", "tex16.png" } };
 int num_effects;
 int effect;
 float* channelRes;
 map<string, texture> textures;
-
+bool requestNextEffect;
 
 void error_callback(int error, const char* description)
 {
@@ -59,10 +62,14 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     glfwSetWindowShouldClose(window, GL_TRUE);
 
   if (key == GLFW_KEY_SPACE && action == GLFW_PRESS){
-    effect = ++effect % num_effects;
-    set_effect();
-    fprintf(stdout, "Using effect: %s\n", effects[effect][0].c_str());
+    next_effect();
   }
+}
+
+void next_effect()
+{
+  effect = ++effect % num_effects;
+  requestNextEffect = true;
 }
 
 string read_file(const char *filePath) {
@@ -299,6 +306,20 @@ int* get_taskbars(const int count, const int height)
   return sizes;
 }
 
+void message_thread()
+{
+  RegisterHotKey(NULL, 1, 0, VK_SPACE);
+  RegisterHotKey(NULL, 2, 0, VK_ESCAPE);
+  MSG msg = { 0 };
+  while (GetMessage(&msg, NULL, 0, 0) != 0)
+  {
+    if (msg.message == WM_HOTKEY) {
+      if (HIWORD(msg.lParam) == VK_SPACE) next_effect();
+      else if (HIWORD(msg.lParam) == VK_ESCAPE) exit(0);
+    }
+  }
+}
+
 int main(void)
 {
   GLFWwindow* window;
@@ -405,7 +426,7 @@ int main(void)
   channelRes = new float[4 * 3];
   ZeroMemory(channelRes, 12 * 4);
 
-  effect = 6;
+  effect = 11;
   set_effect();
 
   int frame = 0;
@@ -424,10 +445,19 @@ int main(void)
   glActiveTexture(GL_TEXTURE0 + 5);
   glBindTexture(GL_TEXTURE_2D, load_texture("blackScreen.png", w, h));
 
+  thread messager(message_thread);
+
   int* taskbars = get_taskbars(count, screenHeight);
 
   while (!glfwWindowShouldClose(window))
   {
+    if (requestNextEffect)
+    {
+      set_effect();
+      fprintf(stdout, "Using effect: %s\n", effects[effect][0].c_str());
+      requestNextEffect = false;
+    }
+
     glfwGetFramebufferSize(window, &width, &height);
     glViewport(0, 0, width, height);
 
